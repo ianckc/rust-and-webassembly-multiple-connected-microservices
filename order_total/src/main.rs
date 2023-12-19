@@ -7,6 +7,7 @@ use std::str;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, StatusCode, Server};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 lazy_static! {
     static ref SALES_TAX_RATE_SERVICE: String = {
@@ -70,16 +71,35 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, anyhow::Er
             let mut order: Order = serde_json::from_slice(&byte_stream).unwrap();
 
             let client = reqwest::Client::new();
-            let rate = client.post(&*SALES_TAX_RATE_SERVICE)
+
+            let response = client.post(&*SALES_TAX_RATE_SERVICE)
                 .body(order.shipping_zip.clone())
                 .send()
-                .await?
-                .text()
-                .await?
-                .parse::<f32>()?;
+                .await?;
 
-            order.total = order.subtotal * (1.0 + rate);
-            Ok(response_build(&serde_json::to_string_pretty(&order)?))
+
+
+            match response.status().as_u16() {
+                200 => {
+                    let rate = response.text().await?.parse::<f32>()?;
+                    order.total = order.subtotal * (1.0 + rate);
+                    Ok(response_build(&serde_json::to_string_pretty(&order)?))
+                },
+                _ => {
+                        let response_data = json!({
+                            "status":"error",
+                            "message":"The zip code in the order does not have a corresponding sales tax rate."
+                        });
+                        let json_data = response_data.to_string();
+                        Ok(
+                            Response::builder()
+                                .status(StatusCode::UNPROCESSABLE_ENTITY)
+                                .header("content-type", "application/json")
+                                .body(Body::from(json_data))
+                                .unwrap()
+                        )
+                    },
+            }
         }
 
         // Return the 404 Not Found for other routes.
