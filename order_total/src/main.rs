@@ -93,6 +93,9 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, anyhow::Er
                         let json_data = response_data.to_string();
                         Ok(
                             Response::builder()
+                                .header("Access-Control-Allow-Origin", "*")
+                                .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                                .header("Access-Control-Allow-Headers", "api,Keep-Alive,User-Agent,Content-Type")
                                 .status(StatusCode::UNPROCESSABLE_ENTITY)
                                 .header("content-type", "application/json")
                                 .body(Body::from(json_data))
